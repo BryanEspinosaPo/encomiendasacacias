@@ -98,18 +98,21 @@ async function migrar() {
 
   const { rows } = await pool.query("SELECT count(*)::int AS n FROM usuarios");
   if (rows[0].n === 0 || reset) {
-    if (!clave) {
-      clave = crypto.randomBytes(6).toString("base64url");
-      console.warn(`AVISO: falta ADMIN_PASSWORD. Clave temporal del usuario "${usuario}": ${clave}`);
+    if (reset || !clave) {
+      // Clave temporal fácil de leer (sin 0/O, 1/l/I) para copiarla de los logs
+      const abc = "abcdefghjkmnpqrstuvwxyz23456789";
+      clave = Array.from(crypto.randomBytes(8), b => abc[b % abc.length]).join("");
     }
     await pool.query(
       `INSERT INTO usuarios (usuario, nombre, password_hash, rol, activo) VALUES ($1,$2,$3,'admin',TRUE)
        ON CONFLICT (usuario) DO UPDATE SET password_hash=EXCLUDED.password_hash, rol='admin', activo=TRUE`,
       [usuario, nombre, await bcrypt.hash(clave, 10)]
     );
-    console.log(reset
-      ? `Administrador restablecido: usuario "${usuario}" con la contraseña de ADMIN_PASSWORD (${clave.length} caracteres). Quita ADMIN_RESET cuando entres.`
-      : `Administrador inicial creado: usuario "${usuario}" (${clave.length} caracteres de contraseña).`);
+    console.log("==================================================");
+    console.log(`ACCESO DE ADMINISTRADOR  usuario: ${usuario}   clave: ${clave}`);
+    console.log("Entra con estos datos y cambia la clave en Usuarios.");
+    if (reset) console.log("Luego borra la variable ADMIN_RESET en Railway.");
+    console.log("==================================================");
   }
   const { rows: admins } = await pool.query("SELECT usuario, activo FROM usuarios WHERE rol='admin' ORDER BY id");
   console.log("Administradores:", admins.map(a => a.usuario + (a.activo ? "" : " (desactivado)")).join(", ") || "ninguno");
@@ -222,7 +225,8 @@ app.post("/api/login", wrap(async (req, res) => {
   const clave = String(req.body?.password || "");
   const { rows } = await pool.query("SELECT * FROM usuarios WHERE usuario=$1", [usuario]);
   const u = rows[0];
-  if (!u || !(await bcrypt.compare(clave, u.password_hash))) fail(401, "Usuario o contraseña incorrectos.");
+  if (!u) { console.warn(`Login fallido: el usuario "${usuario}" no existe.`); fail(401, "Usuario o contraseña incorrectos."); }
+  if (!(await bcrypt.compare(clave, u.password_hash))) { console.warn(`Login fallido: clave incorrecta para "${usuario}" (${clave.length} caracteres escritos).`); fail(401, "Usuario o contraseña incorrectos."); }
   if (!u.activo) fail(403, "Tu usuario está desactivado. Habla con el administrador.");
   intentos.delete(req.ip);
   firmar(res, u);
