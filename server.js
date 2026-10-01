@@ -90,20 +90,29 @@ async function migrar() {
       actualizado_por INT REFERENCES usuarios(id)
     );
   `);
+  const limpiar = v => String(v ?? "").trim().replace(/^["']|["']$/g, "");
+  const usuario = (limpiar(process.env.ADMIN_USUARIO) || "admin").toLowerCase();
+  const nombre = (limpiar(process.env.ADMIN_NOMBRE) || "Administrador").slice(0, 60);
+  let clave = limpiar(process.env.ADMIN_PASSWORD);
+  const reset = /^(1|true|si|sí|yes)$/i.test(limpiar(process.env.ADMIN_RESET));
+
   const { rows } = await pool.query("SELECT count(*)::int AS n FROM usuarios");
-  if (rows[0].n === 0) {
-    const usuario = (process.env.ADMIN_USUARIO || "admin").trim().toLowerCase();
-    let clave = process.env.ADMIN_PASSWORD;
+  if (rows[0].n === 0 || reset) {
     if (!clave) {
       clave = crypto.randomBytes(6).toString("base64url");
       console.warn(`AVISO: falta ADMIN_PASSWORD. Clave temporal del usuario "${usuario}": ${clave}`);
     }
     await pool.query(
-      "INSERT INTO usuarios (usuario, nombre, password_hash, rol) VALUES ($1,$2,$3,'admin')",
-      [usuario, (process.env.ADMIN_NOMBRE || "Administrador").slice(0, 60), await bcrypt.hash(clave, 10)]
+      `INSERT INTO usuarios (usuario, nombre, password_hash, rol, activo) VALUES ($1,$2,$3,'admin',TRUE)
+       ON CONFLICT (usuario) DO UPDATE SET password_hash=EXCLUDED.password_hash, rol='admin', activo=TRUE`,
+      [usuario, nombre, await bcrypt.hash(clave, 10)]
     );
-    console.log(`Administrador inicial creado: ${usuario}`);
+    console.log(reset
+      ? `Administrador restablecido: usuario "${usuario}" con la contraseña de ADMIN_PASSWORD (${clave.length} caracteres). Quita ADMIN_RESET cuando entres.`
+      : `Administrador inicial creado: usuario "${usuario}" (${clave.length} caracteres de contraseña).`);
   }
+  const { rows: admins } = await pool.query("SELECT usuario, activo FROM usuarios WHERE rol='admin' ORDER BY id");
+  console.log("Administradores:", admins.map(a => a.usuario + (a.activo ? "" : " (desactivado)")).join(", ") || "ninguno");
 }
 
 /* ---------------- App ---------------- */
