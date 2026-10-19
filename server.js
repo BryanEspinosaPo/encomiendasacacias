@@ -24,11 +24,13 @@ if (!JWT_SECRET) {
 const needsSsl = process.env.PGSSLMODE === "require" || /rlwy\.net|amazonaws|supabase|neon\.tech/.test(DATABASE_URL);
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: needsSsl ? { rejectUnauthorized: false } : false, max: 10 });
 
-const ESTADOS = ["programado", "recogido", "en_ruta", "entregado", "cancelado"];
+const ESTADOS = ["pre_registro", "programado", "recogido", "en_ruta", "entregado", "cancelado"];
+const CIUDADES = ["Acacias", "Villavicencio"];
 const pad = (n, w) => String(n).padStart(w, "0");
 const guiaDe = id => "EA-" + pad(id, 6);
 const clienteDe = id => "C" + pad(id, 4);
-const idDeGuia = g => { const m = /^EA-(\d{1,9})$/.exec(String(g || "")); return m ? Number(m[1]) : null; };
+const idDeGuia = g => { const m = /^(?:(?:EA|PR)-)?(\d{1,9})$/.exec(String(g || "")); return m ? Number(m[1]) : null; };
+const preDe = id => "PR-" + pad(id, 6);
 
 /* ---------------- Base de datos ---------------- */
 async function migrar() {
@@ -64,6 +66,18 @@ async function migrar() {
       creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
       entregado_en TIMESTAMPTZ
     );
+    ALTER TABLE servicios DROP CONSTRAINT IF EXISTS servicios_estado_check;
+    ALTER TABLE servicios ADD CONSTRAINT servicios_estado_check
+      CHECK (estado IN ('pre_registro','programado','recogido','en_ruta','entregado','cancelado'));
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS dir_recogida VARCHAR(120);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS dir_entrega VARCHAR(120);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS recibe_nombre VARCHAR(60);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS recibe_celular VARCHAR(15);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS completado_en TIMESTAMPTZ;
+    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS direccion VARCHAR(120);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS origen VARCHAR(30);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS destino VARCHAR(30);
+    ALTER TABLE servicios ADD COLUMN IF NOT EXISTS acepta_terminos BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE INDEX IF NOT EXISTS servicios_fecha_idx ON servicios(fecha);
     CREATE INDEX IF NOT EXISTS servicios_estado_idx ON servicios(estado);
     CREATE TABLE IF NOT EXISTS servicio_items (
@@ -191,6 +205,8 @@ const SQL_SERVICIOS = `
   SELECT s.id, s.fecha::text AS fecha,
          to_char(s.hora_recogida,'HH24:MI') AS hora_recogida,
          to_char(s.hora_entrega,'HH24:MI') AS hora_entrega,
+         s.origen, s.destino, s.acepta_terminos,
+         s.dir_recogida, s.dir_entrega, s.recibe_nombre, s.recibe_celular, s.completado_en,
          s.total, s.estado, s.motivo_cancelacion, s.historial, s.creado_en, s.entregado_en,
          c.id AS cliente_id, c.nombre, c.cc::text AS cc, c.celular,
          u.nombre AS creado_por_nombre,
@@ -202,10 +218,16 @@ const SQL_SERVICIOS = `
   JOIN clientes c ON c.id = s.cliente_id
   LEFT JOIN usuarios u ON u.id = s.creado_por`;
 const mapServicio = r => ({
-  id: guiaDe(r.id), guia: guiaDe(r.id), num: r.id,
+  id: String(r.id), num: r.id,
+  guia: r.estado === "pre_registro" ? preDe(r.id) : guiaDe(r.id),
+  dirRecogida: r.dir_recogida || "", dirEntrega: r.dir_entrega || "",
+  recibeNombre: r.recibe_nombre || "", recibeCelular: r.recibe_celular || "",
+  completadoEn: r.completado_en,
   clienteId: clienteDe(r.cliente_id),
   cliente: { nombre: r.nombre, cc: r.cc, celular: r.celular },
   fecha: r.fecha, horaRecogida: r.hora_recogida || "", horaEntrega: r.hora_entrega || "",
+  origen: r.origen || r.items?.[0]?.origen || "", destino: r.destino || r.items?.[0]?.destino || "",
+  aceptaTerminos: !!r.acepta_terminos,
   items: r.items, total: r.total, estado: r.estado,
   motivoCancelacion: r.motivo_cancelacion || null,
   historial: r.historial || [],
@@ -251,8 +273,8 @@ app.post("/api/me/password", auth, wrap(async (req, res) => {
 
 /* --- clientes --- */
 app.get("/api/clientes", auth, wrap(async (req, res) => {
-  const { rows } = await pool.query("SELECT id, nombre, cc::text AS cc, celular, creado FROM clientes ORDER BY id DESC LIMIT 5000");
-  res.json(rows.map(c => ({ id: clienteDe(c.id), num: c.id, nombre: c.nombre, cc: c.cc, celular: c.celular, creadoEn: c.creado })));
+  const { rows } = await pool.query("SELECT id, nombre, cc::text AS cc, celular, direccion, creado FROM clientes ORDER BY id DESC LIMIT 5000");
+  res.json(rows.map(c => ({ id: clienteDe(c.id), num: c.id, nombre: c.nombre, cc: c.cc, celular: c.celular, direccion: c.direccion || "", creadoEn: c.creado })));
 }));
 
 /* --- servicios --- */
@@ -265,74 +287,147 @@ app.get("/api/servicios", auth, wrap(async (req, res) => {
     SQL_SERVICIOS + ` WHERE s.fecha >= $1::date
        OR s.entregado_en >= ($1::date - 1)
        OR s.estado NOT IN ('entregado','cancelado')
-     ORDER BY s.fecha DESC, s.hora_entrega NULLS LAST LIMIT 5000`, [desde]);
+     ORDER BY s.fecha DESC, s.id ASC LIMIT 5000`, [desde]);
   res.json(rows.map(mapServicio));
 }));
 
+/* Ruta permitida: solo Acacias → Villavicencio o Villavicencio → Acacias */
+function leerRuta(b) {
+  const origen = CIUDADES.find(c => c === b.origen);
+  const destino = CIUDADES.find(c => c === b.destino);
+  if (!origen || !destino || origen === destino) fail(400, "Elige la ruta: Acacias → Villavicencio o Villavicencio → Acacias.");
+  return { origen, destino };
+}
+function leerItems(b, ruta) {
+  if (!Array.isArray(b.items) || b.items.length === 0) fail(400, "Agrega al menos un producto.");
+  if (b.items.length > 50) fail(400, "Máximo 50 productos por servicio.");
+  return b.items.map((i, k) => ({
+    descripcion: txt(i.descripcion, 100, `La descripción del producto ${k + 1}`),
+    peso: entero(i.peso, `El peso del producto ${k + 1}`),
+    tamano: txt(i.tamano, 25, `El tamaño del producto ${k + 1}`),
+    valor: entero(i.valor, `El valor del producto ${k + 1}`),
+    origen: ruta.origen, destino: ruta.destino
+  }));
+}
+async function guardarItems(db, sid, items) {
+  await db.query("DELETE FROM servicio_items WHERE servicio_id=$1", [sid]);
+  for (const i of items) {
+    await db.query(
+      `INSERT INTO servicio_items (servicio_id, descripcion, peso, tamano, valor, origen, destino)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`, [sid, i.descripcion, i.peso, i.tamano, i.valor, i.origen, i.destino]);
+  }
+}
+/* Crea o actualiza el cliente sin gastar consecutivos cuando ya existe */
+async function guardarCliente(db, { nombre, cc, celular, direccion }) {
+  const ex = await db.query("SELECT id FROM clientes WHERE celular=$1 FOR UPDATE", [celular]);
+  if (ex.rows[0]) {
+    await db.query("UPDATE clientes SET nombre=$2, cc=$3, direccion=COALESCE($4, direccion) WHERE id=$1",
+      [ex.rows[0].id, nombre, cc, direccion || null]);
+    return ex.rows[0].id;
+  }
+  const ins = await db.query(
+    `INSERT INTO clientes (nombre, cc, celular, direccion) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (celular) DO UPDATE SET nombre=EXCLUDED.nombre RETURNING id`, [nombre, cc, celular, direccion || null]);
+  return ins.rows[0].id;
+}
+async function enTransaccion(fn) {
+  const db = await pool.connect();
+  try { await db.query("BEGIN"); const r = await fn(db); await db.query("COMMIT"); return r; }
+  catch (e) { await db.query("ROLLBACK").catch(() => {}); throw e; }
+  finally { db.release(); }
+}
+
+/* --- 1) Pre-registro: cliente + ruta + direcciones --- */
+app.post("/api/preregistros", auth, wrap(async (req, res) => {
+  const b = req.body || {};
+  const celular = digitos(b.cliente?.celular, 7, 15, "El celular");
+  const nombre = txt(b.cliente?.nombre, 25, "El nombre del cliente");
+  const cc = digitos(b.cliente?.cc, 1, 12, "La C.C.");
+  const fecha = fechaOk(b.fecha, "La fecha del servicio");
+  const ruta = leerRuta(b);
+  const dirRecogida = txt(b.dirRecogida, 120, "La dirección de recogida");
+  const dirEntrega = txt(b.dirEntrega, 120, "La dirección de entrega");
+  const recibeNombre = txt(b.recibeNombre, 60, "El nombre de quien recibe", false) || null;
+  const recibeCelular = b.recibeCelular ? digitos(b.recibeCelular, 7, 15, "El celular de quien recibe") : null;
+  const sid = await enTransaccion(async db => {
+    const clienteId = await guardarCliente(db, { nombre, cc, celular, direccion: dirRecogida });
+    const historial = [{ estado: "pre_registro", at: new Date().toISOString(), por: req.user.nombre }];
+    const sv = await db.query(
+      `INSERT INTO servicios (cliente_id, fecha, total, estado, historial, creado_por, origen, destino,
+         dir_recogida, dir_entrega, recibe_nombre, recibe_celular, acepta_terminos)
+       VALUES ($1,$2,0,'pre_registro',$3,$4,$5,$6,$7,$8,$9,$10,FALSE) RETURNING id`,
+      [clienteId, fecha, JSON.stringify(historial), req.user.id, ruta.origen, ruta.destino,
+       dirRecogida, dirEntrega, recibeNombre, recibeCelular]);
+    return sv.rows[0].id;
+  });
+  res.status(201).json(await servicioPorId(sid));
+}));
+
+/* --- 2) Completar orden: productos + valor + términos → guía --- */
+app.post("/api/servicios/:id/completar", auth, wrap(async (req, res) => {
+  const id = idDeGuia(req.params.id);
+  if (!id) fail(404, "Servicio no encontrado.");
+  const b = req.body || {};
+  if (b.aceptaTerminos !== true) fail(400, "El cliente debe aceptar los términos y condiciones.");
+  const { rows } = await pool.query("SELECT estado, origen, destino FROM servicios WHERE id=$1", [id]);
+  if (!rows[0]) fail(404, "Servicio no encontrado.");
+  if (rows[0].estado !== "pre_registro") fail(409, "Este servicio ya fue completado.");
+  const items = leerItems(b, { origen: rows[0].origen, destino: rows[0].destino });
+  const total = items.reduce((a, i) => a + i.valor, 0);
+  const fecha = b.fecha ? fechaOk(b.fecha, "La fecha del servicio") : null;
+  const evento = { estado: "programado", at: new Date().toISOString(), por: req.user.nombre };
+  await enTransaccion(async db => {
+    await guardarItems(db, id, items);
+    await db.query(
+      `UPDATE servicios SET estado='programado', total=$2, acepta_terminos=TRUE, completado_en=now(),
+         fecha = COALESCE($3::date, fecha), historial = historial || $4::jsonb
+       WHERE id=$1`, [id, total, fecha, JSON.stringify([evento])]);
+  });
+  res.json(await servicioPorId(id));
+}));
+
+/* --- Orden completa en un solo paso (compatibilidad) --- */
 app.post("/api/servicios", auth, wrap(async (req, res) => {
   const b = req.body || {};
   const celular = digitos(b.cliente?.celular, 7, 15, "El celular");
   const nombre = txt(b.cliente?.nombre, 25, "El nombre del cliente");
   const cc = digitos(b.cliente?.cc, 1, 12, "La C.C.");
   const fecha = fechaOk(b.fecha, "La fecha del servicio");
-  const hr = horaOk(b.horaRecogida, "La hora de recogida");
-  const he = horaOk(b.horaEntrega, "La hora de entrega");
-  if (hr && he && he < hr) fail(400, "La hora de entrega no puede ser antes de la hora de recogida.");
-  if (!Array.isArray(b.items) || b.items.length === 0) fail(400, "Agrega al menos un producto.");
-  if (b.items.length > 50) fail(400, "Máximo 50 productos por servicio.");
-  const items = b.items.map((i, k) => ({
-    descripcion: txt(i.descripcion, 100, `La descripción del producto ${k + 1}`),
-    peso: entero(i.peso, `El peso del producto ${k + 1}`),
-    tamano: txt(i.tamano, 25, `El tamaño del producto ${k + 1}`),
-    valor: entero(i.valor, `El valor del producto ${k + 1}`),
-    origen: txt(i.origen, 60, `El origen del producto ${k + 1}`),
-    destino: txt(i.destino, 60, `El destino del producto ${k + 1}`)
-  }));
+  const ruta = leerRuta(b);
+  if (b.aceptaTerminos !== true) fail(400, "El cliente debe aceptar los términos y condiciones.");
+  const items = leerItems(b, ruta);
   const total = items.reduce((a, i) => a + i.valor, 0);
-
-  const db = await pool.connect();
-  try {
-    await db.query("BEGIN");
-    const cli = await db.query(
-      `INSERT INTO clientes (nombre, cc, celular) VALUES ($1,$2,$3)
-       ON CONFLICT (celular) DO UPDATE SET nombre=EXCLUDED.nombre, cc=EXCLUDED.cc
-       RETURNING id`, [nombre, cc, celular]);
+  const sid = await enTransaccion(async db => {
+    const clienteId = await guardarCliente(db, { nombre, cc, celular });
     const historial = [{ estado: "programado", at: new Date().toISOString(), por: req.user.nombre }];
     const sv = await db.query(
-      `INSERT INTO servicios (cliente_id, fecha, hora_recogida, hora_entrega, total, historial, creado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [cli.rows[0].id, fecha, hr, he, total, JSON.stringify(historial), req.user.id]);
-    const sid = sv.rows[0].id;
-    for (const i of items) {
-      await db.query(
-        `INSERT INTO servicio_items (servicio_id, descripcion, peso, tamano, valor, origen, destino)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`, [sid, i.descripcion, i.peso, i.tamano, i.valor, i.origen, i.destino]);
-    }
-    await db.query("COMMIT");
-    res.status(201).json(await servicioPorId(sid));
-  } catch (e) {
-    await db.query("ROLLBACK").catch(() => {});
-    throw e;
-  } finally {
-    db.release();
-  }
+      `INSERT INTO servicios (cliente_id, fecha, total, historial, creado_por, origen, destino, dir_recogida, dir_entrega, acepta_terminos, completado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE,now()) RETURNING id`,
+      [clienteId, fecha, total, JSON.stringify(historial), req.user.id, ruta.origen, ruta.destino,
+       txt(b.dirRecogida, 120, "La dirección de recogida", false) || null, txt(b.dirEntrega, 120, "La dirección de entrega", false) || null]);
+    await guardarItems(db, sv.rows[0].id, items);
+    return sv.rows[0].id;
+  });
+  res.status(201).json(await servicioPorId(sid));
 }));
 
 app.patch("/api/servicios/:guia/estado", auth, wrap(async (req, res) => {
   const id = idDeGuia(req.params.guia);
   if (!id) fail(404, "Guía no encontrada.");
   const estado = String(req.body?.estado || "");
-  if (!ESTADOS.includes(estado)) fail(400, "Estado no válido.");
+  if (!ESTADOS.includes(estado) || estado === "pre_registro") fail(400, "Estado no válido.");
+  const { rows } = await pool.query("SELECT estado FROM servicios WHERE id=$1", [id]);
+  if (!rows[0]) fail(404, "Guía no encontrada.");
+  if (rows[0].estado === "pre_registro" && estado !== "cancelado") fail(409, "Primero completa la orden con los productos y el valor.");
   const motivo = estado === "cancelado" ? txt(req.body?.motivo, 120, "El motivo", false) || null : null;
   const evento = { estado, at: new Date().toISOString(), por: req.user.nombre, ...(motivo ? { motivo } : {}) };
-  const { rowCount } = await pool.query(
+  await pool.query(
     `UPDATE servicios SET
        estado = $2::varchar,
        historial = historial || $3::jsonb,
        entregado_en = CASE WHEN $2::varchar = 'entregado' THEN now() ELSE NULL END,
        motivo_cancelacion = CASE WHEN $2::varchar = 'cancelado' THEN $4::varchar ELSE motivo_cancelacion END
      WHERE id = $1`, [id, estado, JSON.stringify([evento]), motivo]);
-  if (!rowCount) fail(404, "Guía no encontrada.");
   res.json(await servicioPorId(id));
 }));
 

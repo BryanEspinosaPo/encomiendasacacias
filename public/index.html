@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
 html,body{margin:0}
-/* Layout: barra de marca arriba + pestañas; tablero como línea de tiempo por hora de entrega */
+/* Layout: barra de marca arriba + pestañas; tablero de seguimiento por columnas de estado */
 :root{
   --bg:#f2f6fb; --surface:#ffffff; --surface-2:#e8f0f9; --line:#d3deeb;
   --fg:#0f2340; --muted:#5a6d88;
@@ -90,6 +90,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-o
 /* status pills */
 .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
 .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.s-pre_registro{background:var(--warn-bg);color:var(--warn)}
 .s-programado{background:var(--info-bg);color:var(--info)}
 .s-recogido{background:var(--warn-bg);color:var(--warn)}
 .s-en_ruta{background:var(--route-bg);color:var(--route)}
@@ -196,6 +197,41 @@ td.r,th.r{text-align:right}
 .login-card{width:100%;max-width:380px;padding:28px 24px;display:flex;flex-direction:column;gap:14px}
 .login-card h1{font-size:24px;text-align:center}
 .login-logo{width:150px;margin:0 auto}
+/* tablero por columnas */
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:12px;overflow-x:auto;padding-bottom:10px;align-items:start;scroll-snap-type:x proximity}
+.col{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-width:0;scroll-snap-align:start}
+.col-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);font-weight:700}
+.col-h .dot{width:10px;height:10px;border-radius:50%}
+.col-h .cnt{margin-left:auto;background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:1px 9px;font-size:12px}
+.col-b{display:flex;flex-direction:column;gap:8px;padding:10px;min-height:90px}
+.col-empty{color:var(--muted);font-size:13px;text-align:center;padding:18px 0}
+.kcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:5px;box-shadow:var(--shadow);min-width:0}
+.kcard.is-late{border-color:var(--bad);background:var(--bad-bg)}
+.kcard .guia{font-family:var(--f-display);font-weight:600;color:var(--brand)}
+.kcard .cli{font-weight:700}
+.kcard .cli small{color:var(--muted);font-weight:500}
+.kcard .sub{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.kcard .ruta{display:inline-flex;gap:4px;align-items:center;font-size:12px;font-weight:700;background:var(--info-bg);color:var(--info);border-radius:99px;padding:2px 9px;width:fit-content}
+.kcard .foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
+.kcard .tot{font-family:var(--f-display);font-weight:600;margin-right:auto}
+.kcard select{width:auto;padding:4px 6px;font-size:12px}
+.kcard .btn.sm{padding:5px 8px;font-size:12px}
+.kpis4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.route-pick{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:end}
+.route-pick .arrow{font-family:var(--f-display);font-size:26px;color:var(--brand);padding-bottom:6px}
+@media (max-width:560px){.route-pick{grid-template-columns:1fr}.route-pick .arrow{display:none}}
+.terms-box{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface-2);display:flex;gap:10px;align-items:flex-start}
+.terms-box input{width:20px;height:20px;flex:none;margin-top:2px}
+.terms-txt{font-size:13px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.terms-txt ul,.terms-txt ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.receipt .cond{font-size:9.5px;line-height:1.4;color:#44597a;border-top:2px dashed #b9c9de;padding-top:10px;display:flex;flex-direction:column;gap:5px}
+.receipt .cond b.t{font-size:11px;color:#0b3a78}
+.receipt .cond ul,.receipt .cond ol{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:2px}
+.receipt .acepta{font-size:11px;font-weight:700;color:#1f8a4c}
+.pre-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:14px}
+.pre-sum dt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.pre-sum dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.kcard.pre{border-style:dashed}
 .steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 @media (prefers-reduced-motion:no-preference){.card,.kpi{transition:border-color .15s}}
 </style>
@@ -241,23 +277,35 @@ td.r,th.r{text-align:right}
   <!-- TABLERO -->
   <section id="v-tablero" class="tl-view" style="display:flex;flex-direction:column;gap:16px">
     <div class="row">
-      <h1 style="font-size:26px">Entregas del día</h1>
+      <h1 style="font-size:26px">Tablero de seguimiento</h1>
       <span class="spacer"></span>
       <label class="f" style="flex-direction:row;align-items:center;gap:8px">Fecha <input type="date" id="dashDate" style="width:auto"></label>
       <button class="btn primary" data-goto="nuevo">+ Nuevo servicio</button>
     </div>
-    <div class="kpis" id="kpis"></div>
+    <div class="kpis4" id="kpis"></div>
     <div class="row">
-      <input type="search" id="dashSearch" placeholder="Buscar por cliente, celular, guía o destino" style="max-width:420px">
+      <input type="search" id="dashSearch" placeholder="Buscar por cliente, celular o guía" style="max-width:420px">
+      <span class="muted small">Los servicios de días anteriores sin entregar aparecen en rojo.</span>
     </div>
-    <div id="timeline" class="tl"></div>
+    <div id="board" class="board"></div>
   </section>
 
   <!-- NUEVO -->
   <section id="v-nuevo" hidden>
     <form id="form" class="panel pad" style="display:flex;flex-direction:column;gap:22px" autocomplete="off">
       <div>
-        <div class="section-t"><h2>Cliente</h2><span class="muted small">Escribe el celular: si el cliente ya existe se llenan sus datos.</span></div>
+        <div class="section-t"><h2>Pre-registro del recorrido</h2><span class="muted small">Primero se registra la ruta, el cliente y las direcciones. Los productos y el valor se agregan al completar la orden.</span></div>
+        <div class="grid g3">
+          <label class="f">Ruta<select id="fRutaSel" required>
+            <option value="">Selecciona la ruta…</option>
+            <option value="Acacias|Villavicencio">Acacias → Villavicencio</option>
+            <option value="Villavicencio|Acacias">Villavicencio → Acacias</option>
+          </select></label>
+          <label class="f">Fecha del servicio<input type="date" id="fFecha" required></label>
+        </div>
+      </div>
+      <div>
+        <div class="section-t"><h2>Cliente (remitente)</h2><span class="muted small">Escribe el celular: si el cliente ya existe se llenan sus datos.</span></div>
         <div class="grid g3">
           <label class="f">Celular<input id="fCel" inputmode="tel" required maxlength="15" placeholder="3001234567" list="celList"></label>
           <label class="f">Nombre del cliente<input id="fNom" required maxlength="25" placeholder="Máx. 25 caracteres"></label>
@@ -267,28 +315,42 @@ td.r,th.r{text-align:right}
         <div id="cliState" style="margin-top:10px"></div>
       </div>
       <div>
-        <div class="section-t"><h2>Servicio</h2></div>
-        <div class="grid g3">
-          <label class="f">Fecha del servicio<input type="date" id="fFecha" required></label>
-          <label class="f">Hora de recogida<input type="time" id="fHRec" required></label>
-          <label class="f">Hora prevista de entrega<input type="time" id="fHEnt" required></label>
+        <div class="section-t"><h2>Direcciones</h2></div>
+        <div class="grid g2">
+          <label class="f"><span id="lblRec">Dirección de recogida</span><input id="fDirRec" required maxlength="120" placeholder="Ej: Calle 15 # 20-30, barrio Centro"></label>
+          <label class="f"><span id="lblEnt">Dirección de entrega</span><input id="fDirEnt" required maxlength="120" placeholder="Ej: Cra 40 # 26C-10, Barzal"></label>
+          <label class="f">Quién recibe (opcional)<input id="fRecNom" maxlength="60" placeholder="Nombre de quien recibe"></label>
+          <label class="f">Celular de quien recibe (opcional)<input id="fRecCel" inputmode="tel" maxlength="15" placeholder="3001234567"></label>
         </div>
+      </div>
+      <div class="row">
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="resetForm">Limpiar</button>
+        <button type="submit" class="btn" id="savePre" data-modo="pre">Guardar pre-registro</button>
+        <button type="submit" class="btn primary" id="saveBtn" data-modo="completar">Guardar y completar orden →</button>
+      </div>
+      <p id="formErr" class="small" style="color:var(--bad);margin:0" hidden></p>
+    </form>
+
+    <form id="ordForm" class="panel pad" style="display:flex;flex-direction:column;gap:22px" autocomplete="off" hidden>
+      <div>
+        <div class="section-t"><h2>Completar orden de servicio</h2><span class="spacer"></span><button type="button" class="btn sm ghost" id="ordVolver">← Volver</button></div>
+        <dl class="pre-sum" id="preSum"></dl>
       </div>
       <div>
         <div class="section-t"><h2>Productos</h2><span class="spacer"></span><button type="button" class="btn sm" id="addItem">+ Agregar producto</button></div>
-        <div class="checks" style="margin-bottom:12px">
-          <label><input type="checkbox" id="sameO" checked> Mismo origen para todos</label>
-          <label><input type="checkbox" id="sameD"> Mismo destino (checkpoint) para todos</label>
-        </div>
         <div class="items-f" id="items"></div>
       </div>
-      <div class="totalbar">
-        <div><div class="eyebrow" style="color:#bcd6f3">Valor del servicio</div><div class="amt num" id="fTotal">$0</div></div>
-        <span class="spacer"></span>
-        <button type="button" class="btn ghost" id="resetForm" style="color:#fff;border-color:rgba(255,255,255,.35)">Limpiar</button>
-        <button type="submit" class="btn sun" id="saveBtn">Guardar y generar guía</button>
+      <div class="terms-box">
+        <input type="checkbox" id="fTerminos" required>
+        <label for="fTerminos" class="small"><b>El cliente acepta los términos y condiciones</b> del servicio de envíos. <button type="button" class="btn sm ghost" id="verTerminos" style="padding:2px 8px">Ver condiciones</button></label>
       </div>
-      <p id="formErr" class="small" style="color:var(--bad);margin:0" hidden></p>
+      <div class="totalbar">
+        <div><div class="eyebrow" style="color:#bcd6f3">Valor del servicio</div><div class="amt num" id="fTotal">$0</div><div class="small" id="fRuta" style="color:#cfe2f7"></div></div>
+        <span class="spacer"></span>
+        <button type="submit" class="btn sun" id="ordBtn">Generar guía</button>
+      </div>
+      <p id="ordErr" class="small" style="color:var(--bad);margin:0" hidden></p>
     </form>
   </section>
 
@@ -359,12 +421,34 @@ const EMPRESA = {
   email: "encomiendas.acacias2021@gmail.com"
 };
 const ESTADOS = [
+  {k:"pre_registro", t:"Pre-registro", c:"var(--sun)"},
   {k:"programado", t:"Programado", c:"var(--info)"},
   {k:"recogido", t:"Recogido", c:"var(--warn)"},
   {k:"en_ruta", t:"En ruta", c:"var(--route)"},
   {k:"entregado", t:"Entregado", c:"var(--ok)"},
   {k:"cancelado", t:"Cancelado", c:"var(--idle)"}
 ];
+const TERMINOS = {
+  titulo: "Términos y condiciones para prestación de servicios de envíos",
+  puntos: [
+    "Cada uno de los servicios de envíos o recogidas de mercancías serán programados previamente como mínimo con una (1) hora de anticipación que deberá tenerse en cuenta al solicitar el servicio.",
+    "El Remitente se compromete a entregar la mercancía debidamente empacada de acuerdo a sus características y con recibos de compra o traslado, necesario para demostrar ante la Policía o DIAN su legalidad. ENCOMIENDAS ACACIAS no se hace responsable por decomisos de aduana u otras autoridades.",
+    "El Cliente se compromete a informar el contenido real de los paquetes sellados y se hace responsable de todos los perjuicios que ocasionen por falta de información, falsedad, omisión o insuficiencia en documentos."
+  ],
+  nota: "No transportamos materiales tóxicos, venenosos, contaminantes, inflamables o corrosivos. El transporte de vidrios, acrílicos, joyas, computadores, portátiles, pantallas y mercancía delicada se hará solo a responsabilidad del cliente.",
+  intro: "En consecuencia, declaro libre de toda responsabilidad a ENCOMIENDAS ACACIAS cuando:",
+  casos: [
+    "Cualquier hecho o circunstancia se presente, tanto en el desplazamiento como durante el cargue y descargue de los bienes descritos en este documento y que pueda comprometer su integridad física y/o patrimonial.",
+    "El objeto del envío sufra pérdida, expoliación o avería que se deba a fuerza mayor o caso fortuito.",
+    "El Objeto Postal haya sido incautado, decomisado o inspeccionado por agentes aduaneros y/o autoridades de Policía en Colombia de tránsito o destino.",
+    "Haya imprecisión en la información suministrada por el Remitente o por el Destinatario en relación con el contenido del envío y se pueda demostrar con la guía o la prueba de entrega.",
+    "El remitente haga uso indebido del servicio."
+  ],
+  cierre: "Para los efectos legales pertinentes, renuncio a presentar demandas civiles o penales en contra de los colaboradores y/o a quien represente a ENCOMIENDAS ACACIAS por los casos aquí descritos y que en consecuencia resulte en la pérdida o daños totales o parciales de los bienes que bajo mi responsabilidad entregué a la transportadora ENCOMIENDAS ACACIAS."
+};
+const terminosHTML = (cls) => `<div class="${cls}"><b class="t">${TERMINOS.titulo}</b><ul>${TERMINOS.puntos.map(x=>`<li>${x}</li>`).join("")}</ul><div><b>${TERMINOS.nota}</b></div><div>${TERMINOS.intro}</div><ol>${TERMINOS.casos.map(x=>`<li>${x}</li>`).join("")}</ol><div>${TERMINOS.cierre}</div></div>`;
+const terminosTexto = () => [`*${TERMINOS.titulo.toUpperCase()}*`, ...TERMINOS.puntos.map(x=>"• "+x), "• "+TERMINOS.nota, "", TERMINOS.intro, ...TERMINOS.casos.map((x,i)=>`${i+1}. ${x}`), "", TERMINOS.cierre].join("\n");
+const ruta = s => { const o = s.origen || s.items?.[0]?.origen || "", d = s.destino || s.items?.[0]?.destino || ""; return o||d ? `${o} → ${d}` : ""; };
 const EST = Object.fromEntries(ESTADOS.map(e=>[e.k,e]));
 const NEXT = {programado:"recogido", recogido:"en_ruta", en_ruta:"entregado"};
 const LOGO = document.querySelector(".brandrow img").src;
@@ -473,83 +557,100 @@ function go(tab){
   ["tablero","nuevo","clientes","reporte","usuarios"].forEach(t=>{ const v=$("#v-"+t); v.hidden = t!==tab; if(t===tab && t!=="nuevo") v.style.display="flex"; });
   window.scrollTo({top:0});
 }
-$("#tabs").addEventListener("click", e=>{ const b=e.target.closest("button[data-tab]"); if(b) go(b.dataset.tab); });
-document.addEventListener("click", e=>{ const g=e.target.closest("[data-goto]"); if(g){ go(g.dataset.goto); } });
+$("#tabs").addEventListener("click", e=>{ const b=e.target.closest("button[data-tab]"); if(b){ if(b.dataset.tab==="nuevo") showPre(); go(b.dataset.tab); } });
+document.addEventListener("click", e=>{ const g=e.target.closest("[data-goto]"); if(g){ if(g.dataset.goto==="nuevo") showPre(); go(g.dataset.goto); } });
 
 /* ---------------- Tablero ---------------- */
-let filtro = "todos";
-function isLate(s){
-  if(["entregado","cancelado"].includes(s.estado)) return false;
-  const t = today();
-  if(s.fecha < t) return true;
-  return s.fecha === t && s.horaEntrega && s.horaEntrega < nowHM();
-}
+const FIN = ["entregado","cancelado"];
+function isLate(s){ return !FIN.includes(s.estado) && s.fecha < today(); }
 function renderAll(){ renderDash(); renderClientes(); renderReporte(); }
+function enTablero(s, d){
+  if(s.fecha === d) return true;
+  if(s.fecha < d && !FIN.includes(s.estado)) return true;          // pendientes de días anteriores
+  if(s.estado === "entregado" && dayOf(s.entregadoEn) === d) return true;
+  return false;
+}
 function renderDash(){
   const d = $("#dashDate").value || today();
   const q = $("#dashSearch").value.trim().toLowerCase();
-  const del = state.servicios.filter(s=>s.fecha===d);
-  const counts = Object.fromEntries(ESTADOS.map(e=>[e.k,0]));
-  del.forEach(s=>counts[s.estado]=(counts[s.estado]||0)+1);
-  const valor = del.filter(s=>s.estado==="entregado").reduce((a,s)=>a+(+s.total||0),0);
+  const del = state.servicios.filter(s=>enTablero(s, d));
+  const enCurso = del.filter(s=>!FIN.includes(s.estado) && s.estado!=="pre_registro").length;
+  const pre = del.filter(s=>s.estado==="pre_registro").length;
   const atras = del.filter(isLate).length;
-  $("#kpis").innerHTML =
-    `<button class="kpi" data-f="todos" aria-pressed="${filtro==="todos"}"><span class="l">Todos</span><span class="v num">${del.length}</span></button>` +
-    ESTADOS.map(e=>`<button class="kpi" data-f="${e.k}" aria-pressed="${filtro===e.k}"><span class="l"><span class="dot" style="background:${e.c}"></span>${e.t}</span><span class="v num">${counts[e.k]||0}</span></button>`).join("") +
-    (atras?`<button class="kpi" data-f="atrasados" aria-pressed="${filtro==="atrasados"}" style="border-color:var(--bad)"><span class="l" style="color:var(--bad)">Atrasados</span><span class="v num" style="color:var(--bad)">${atras}</span></button>`:"") +
-    `<div class="kpi money"><span class="l">Cobrado (entregados)</span><span class="v num">${money(valor)}</span></div>`;
-  let list = del.filter(s=> filtro==="todos" ? true : filtro==="atrasados" ? isLate(s) : s.estado===filtro);
-  if(q) list = list.filter(s=> [s.guia, s.cliente?.nombre, s.cliente?.celular, s.cliente?.cc, ...(s.items||[]).map(i=>i.destino+" "+i.descripcion)].join(" ").toLowerCase().includes(q));
-  list.sort((a,b)=> (a.horaEntrega||"99").localeCompare(b.horaEntrega||"99") || (a.num-b.num));
-  const tl = $("#timeline");
-  if(!list.length){
-    tl.innerHTML = `<div class="panel empty"><h3>${del.length? "Nada con este filtro" : "No hay servicios para "+fmtDate(d)}</h3><p>${del.length? "Prueba con otro estado o borra la búsqueda." : "Registra el primero desde <b>Nuevo servicio</b>. Aparecerá aquí ordenado por hora estimada de entrega."}</p>${del.length?"":`<button class="btn primary" data-goto="nuevo">+ Nuevo servicio</button>`}</div>`;
-    return;
-  }
-  const groups = {};
-  list.forEach(s=>{ const h=(s.horaEntrega||"--:--").slice(0,2); (groups[h] ||= []).push(s); });
-  tl.innerHTML = Object.entries(groups).map(([h,arr])=>`
-    <div class="slot">
-      <div class="slot-h num">${h==="--"?"--":fmtHora(h+":00").replace(":00 ","<br><small>")+"</small>"}</div>
-      <div class="slot-list">${arr.map(cardHTML).join("")}</div>
-    </div>`).join("");
+  const entregados = del.filter(s=>s.estado==="entregado");
+  const cobrado = entregados.reduce((a,s)=>a+(+s.total||0),0);
+  $("#kpis").innerHTML = `
+    <div class="kpi" style="cursor:default"><span class="l"><span class="dot" style="background:var(--sun)"></span>Pre-registros</span><span class="v num">${pre}</span></div>
+    <div class="kpi" style="cursor:default"><span class="l"><span class="dot" style="background:var(--info)"></span>En curso</span><span class="v num">${enCurso}</span></div>
+    <div class="kpi" style="cursor:default${atras?";border-color:var(--bad)":""}"><span class="l" style="${atras?"color:var(--bad)":""}"><span class="dot" style="background:var(--bad)"></span>Atrasados</span><span class="v num" style="${atras?"color:var(--bad)":""}">${atras}</span></div>
+    <div class="kpi" style="cursor:default"><span class="l"><span class="dot" style="background:var(--ok)"></span>Entregados</span><span class="v num">${entregados.length}</span></div>
+    <div class="kpi money"><span class="l">Cobrado (entregados)</span><span class="v num">${money(cobrado)}</span></div>`;
+  let list = del;
+  if(q) list = list.filter(s=> [s.guia, s.cliente?.nombre, s.cliente?.celular, s.cliente?.cc, ruta(s), s.dirRecogida, s.dirEntrega, ...(s.items||[]).map(i=>i.descripcion)].join(" ").toLowerCase().includes(q));
+  list = [...list].sort((a,b)=> (a.fecha.localeCompare(b.fecha)) || (a.num-b.num));
+  $("#board").innerHTML = ESTADOS.map(e=>{
+    const arr = list.filter(s=>s.estado===e.k);
+    return `<section class="col" aria-label="${e.t}">
+      <div class="col-h"><span class="dot" style="background:${e.c}"></span>${e.t}<span class="cnt num">${arr.length}</span></div>
+      <div class="col-b">${arr.length ? arr.map(cardHTML).join("") : `<div class="col-empty">Sin servicios</div>`}</div>
+    </section>`;
+  }).join("");
 }
 function cardHTML(s){
+  if(s.estado === "pre_registro") return preCardHTML(s);
   const late = isLate(s);
   const items = (s.items||[]);
   const nxt = NEXT[s.estado];
   const w = canWrite();
-  return `<article class="card ${late?"is-late":""} ${["entregado","cancelado"].includes(s.estado)?"done":""}" data-id="${esc(s.id)}">
-    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
-      <div class="row" style="gap:8px"><span class="guia">${esc(s.guia)}</span><span class="pill s-${s.estado}">${EST[s.estado]?.t||s.estado}</span>${late?`<span class="pill late">Atrasado</span>`:""}</div>
-      <div class="cli">${esc(s.cliente?.nombre)}</div>
-      <div class="meta num"><span>Cel. ${esc(s.cliente?.celular)}</span><span>Recoge ${fmtHora(s.horaRecogida)}</span><span><b style="color:var(--fg)">Entrega ${fmtHora(s.horaEntrega)}</b></span></div>
-      <div class="items">${items.map(i=>`<span>• ${esc(i.descripcion)} <span class="muted">(${i.peso||0} kg · ${esc(i.tamano)}) ${esc(i.origen)} → ${esc(i.destino)}</span></span>`).join("")}</div>
+  const desc = items.map(i=>i.descripcion).join(" · ");
+  return `<article class="kcard ${late?"is-late":""}" data-id="${esc(s.id)}">
+    <div class="row" style="gap:6px"><span class="guia">${esc(s.guia)}</span>${late?`<span class="pill late">Atrasado</span>`:""}</div>
+    <div class="cli">${esc(s.cliente?.nombre)} <small>(${esc(s.clienteId)})</small></div>
+    <span class="ruta">${esc(ruta(s))}</span>
+    <div class="sub">${esc(desc)}</div>
+    <div class="sub num">Fecha: ${fmtDate(s.fecha)} · Cel. ${esc(s.cliente?.celular)}</div>
+    <div class="foot">
+      <span class="tot num">${money(s.total)}</span>
+      ${w && nxt ? `<button class="btn sm primary" data-act="next" title="Pasar a ${EST[nxt].t}">→ ${EST[nxt].t}</button>`:""}
     </div>
-    <div class="right"><span class="total num">${money(s.total)}</span><span class="muted small">${items.length} producto${items.length===1?"":"s"}</span></div>
-    <div class="acts">
-      ${w && nxt ? `<button class="btn sm primary" data-act="next">Marcar ${EST[nxt].t.toLowerCase()}</button>`:""}
-      ${w ? `<select data-act="estado" aria-label="Cambiar estado">${ESTADOS.map(e=>`<option value="${e.k}" ${e.k===s.estado?"selected":""}>${e.t}</option>`).join("")}</select>`:""}
+    <div class="foot">
       <button class="btn sm" data-act="guia">Ver guía</button>
       <a class="btn sm wa" href="${waLink(s.cliente?.celular, estadoMsg(s))}" target="_blank" rel="noopener">WhatsApp</a>
-      ${w && !["entregado","cancelado"].includes(s.estado) ? `<span class="spacer"></span><button class="btn sm ghost danger" data-act="cancel">Cancelar servicio</button>`:""}
+      ${w ? `<select data-act="estado" aria-label="Cambiar estado">${ESTADOS.filter(e=>e.k!=="pre_registro").map(e=>`<option value="${e.k}" ${e.k===s.estado?"selected":""}>${e.t}</option>`).join("")}</select>`:""}
+      ${w && !FIN.includes(s.estado) ? `<button class="btn sm ghost danger" data-act="cancel">Cancelar</button>`:""}
     </div>
   </article>`;
 }
-$("#kpis").addEventListener("click", e=>{ const b=e.target.closest("[data-f]"); if(!b) return; filtro = b.dataset.f===filtro && filtro!=="todos" ? "todos" : b.dataset.f; renderDash(); });
-$("#dashDate").addEventListener("change", ()=>{ filtro="todos"; renderDash(); refresh().catch(()=>{}); });
+function preCardHTML(s){
+  const late = isLate(s); const w = canWrite();
+  return `<article class="kcard pre ${late?"is-late":""}" data-id="${esc(s.id)}">
+    <div class="row" style="gap:6px"><span class="guia">${esc(s.guia)}</span>${late?`<span class="pill late">Atrasado</span>`:""}</div>
+    <div class="cli">${esc(s.cliente?.nombre)} <small>(${esc(s.clienteId)})</small></div>
+    <span class="ruta">${esc(ruta(s))}</span>
+    <div class="sub">Recoge: ${esc(s.dirRecogida||"—")}</div>
+    <div class="sub">Entrega: ${esc(s.dirEntrega||"—")}</div>
+    <div class="sub num">Fecha: ${fmtDate(s.fecha)} · Cel. ${esc(s.cliente?.celular)}</div>
+    ${w?`<div class="foot"><button class="btn sm primary" data-act="completar" style="flex:1;justify-content:center">Completar orden</button></div>`:""}
+    <div class="foot">
+      <a class="btn sm wa" href="${waLink(s.cliente?.celular, preMsg(s))}" target="_blank" rel="noopener">WhatsApp</a>
+      ${w?`<button class="btn sm ghost danger" data-act="cancel">Cancelar</button>`:""}
+    </div>
+  </article>`;
+}
+$("#dashDate").addEventListener("change", ()=>{ renderDash(); refresh().catch(()=>{}); });
 $("#dashSearch").addEventListener("input", renderDash);
-$("#timeline").addEventListener("click", async e=>{
-  const card = e.target.closest(".card"); if(!card) return;
+$("#board").addEventListener("click", async e=>{
+  const card = e.target.closest(".kcard"); if(!card) return;
   const s = state.servicios.find(x=>x.id===card.dataset.id); if(!s) return;
   const act = e.target.closest("[data-act]")?.dataset.act;
   if(act==="next") setEstado(s, NEXT[s.estado]);
   if(act==="guia") openGuia(s);
   if(act==="cancel") confirmCancel(s);
+  if(act==="completar") openCompletar(s);
 });
-$("#timeline").addEventListener("change", e=>{
+$("#board").addEventListener("change", e=>{
   if(e.target.dataset.act!=="estado") return;
-  const s = state.servicios.find(x=>x.id===e.target.closest(".card").dataset.id);
+  const s = state.servicios.find(x=>x.id===e.target.closest(".kcard").dataset.id);
   if(s && e.target.value!==s.estado) setEstado(s, e.target.value);
 });
 async function setEstado(s, estado, motivo){
@@ -570,60 +671,35 @@ function confirmCancel(s){
   $("#doCancel").onclick = async ()=>{ const m=$("#motivoCancel").value.trim(); closeModal(); await setEstado(s, "cancelado", m); };
 }
 
-/* ---------------- Formulario ---------------- */
+/* ---------------- Pre-registro y orden ---------------- */
 let items = [];
 let clienteSel = null;
-function blankItem(){ const p = items[0]; return {descripcion:"", peso:"", tamano:"", valor:"", origen: p?.origen || "Acacias", destino: $("#sameD")?.checked && p ? p.destino : ""}; }
+let completando = null;
+function blankItem(){ return {descripcion:"", peso:"", tamano:"", valor:""}; }
 function resetForm(){
   $("#form").reset();
   $("#fFecha").value = today();
-  $("#sameO").checked = true; $("#sameD").checked = false;
-  items = []; items.push(blankItem());
   clienteSel = null; $("#cliState").innerHTML = ""; $("#formErr").hidden = true;
-  renderItems();
+  updLabels();
+  showPre();
 }
-function renderItems(){
-  const sameO=$("#sameO").checked, sameD=$("#sameD").checked;
-  $("#items").innerHTML = items.map((it,i)=>`
-    <div class="item-f" data-i="${i}">
-      <div class="full row"><span class="item-n">Producto ${i+1}</span><span class="spacer"></span>${items.length>1?`<button type="button" class="btn sm ghost danger" data-rm="${i}">Quitar</button>`:""}</div>
-      <label class="f desc">Descripción<input id="it-desc-${i}" data-k="descripcion" maxlength="100" required value="${esc(it.descripcion)}" placeholder="Ej: caja de ropa, bulto de papa"></label>
-      <label class="f">Peso aprox. (kg)<input id="it-peso-${i}" data-k="peso" type="number" min="0" step="1" inputmode="numeric" required value="${esc(it.peso)}"></label>
-      <label class="f">Tamaño<input id="it-tam-${i}" data-k="tamano" maxlength="25" list="tamList" required value="${esc(it.tamano)}" placeholder="Pequeño, mediano…"></label>
-      <label class="f">Valor envío<input id="it-val-${i}" data-k="valor" type="number" min="0" step="100" inputmode="numeric" required value="${esc(it.valor)}" placeholder="$"></label>
-      <div class="od">
-        <label class="f">Origen<input id="it-ori-${i}" data-k="origen" maxlength="60" required value="${esc(it.origen)}" ${sameO&&i>0?"readonly":""}></label>
-        <label class="f">Destino / checkpoint<input id="it-des-${i}" data-k="destino" maxlength="60" required value="${esc(it.destino)}" ${sameD&&i>0?"readonly":""} placeholder="Dirección o punto"></label>
-      </div>
-    </div>`).join("") + `<datalist id="tamList"><option value="Sobre"><option value="Pequeño"><option value="Mediano"><option value="Grande"><option value="Extra grande"><option value="Bulto"></datalist>`;
-  updTotal();
+function showPre(){ completando = null; $("#form").hidden = false; $("#ordForm").hidden = true; }
+function updLabels(){
+  const [o,d] = ($("#fRutaSel").value || "|").split("|");
+  $("#lblRec").textContent = o ? `Dirección de recogida en ${o}` : "Dirección de recogida";
+  $("#lblEnt").textContent = d ? `Dirección de entrega en ${d}` : "Dirección de entrega";
 }
-function syncSame(){
-  if($("#sameO").checked) items.forEach((it,i)=>{ if(i>0) it.origen = items[0].origen; });
-  if($("#sameD").checked) items.forEach((it,i)=>{ if(i>0) it.destino = items[0].destino; });
-}
-function updTotal(){ const t = items.reduce((a,i)=>a+(Number(i.valor)||0),0); $("#fTotal").textContent = money(t); return t; }
-$("#items").addEventListener("input", e=>{
-  const box = e.target.closest(".item-f"); if(!box) return;
-  const i = +box.dataset.i, k = e.target.dataset.k;
-  items[i][k] = e.target.value;
-  if(i===0 && (k==="origen"||k==="destino")){
-    syncSame();
-    items.forEach((it,j)=>{ if(j>0){ const el=$(`#it-${k==="origen"?"ori":"des"}-${j}`); if(el && el.readOnly) el.value = it[k]; } });
-  }
-  if(k==="valor") updTotal();
-});
-$("#items").addEventListener("click", e=>{ const r=e.target.closest("[data-rm]"); if(r){ items.splice(+r.dataset.rm,1); renderItems(); } });
-$("#addItem").onclick = ()=>{ items.push(blankItem()); syncSame(); renderItems(); $(`#it-desc-${items.length-1}`).focus(); };
-$("#sameO").onchange = $("#sameD").onchange = ()=>{ syncSame(); renderItems(); };
-$("#resetForm").onclick = resetForm;
+$("#fRutaSel").addEventListener("change", updLabels);
+let modoGuardar = "pre";
+$("#savePre").addEventListener("click", ()=> modoGuardar = "pre");
+$("#saveBtn").addEventListener("click", ()=> modoGuardar = "completar");
 function fillCelList(){ $("#celList").innerHTML = state.clientes.map(c=>`<option value="${esc(c.celular)}">${esc(c.nombre)}</option>`).join(""); }
 function lookupCliente(){
   const cel = onlyDigits($("#fCel").value);
   if(cel.length<7){ clienteSel=null; $("#cliState").innerHTML=""; return; }
   const c = state.clientes.find(x=>x.celular===cel);
   if(c){
-    if(clienteSel?.id!==c.id){ $("#fNom").value=c.nombre; $("#fCC").value=c.cc; }
+    if(clienteSel?.id!==c.id){ $("#fNom").value=c.nombre; $("#fCC").value=c.cc; if(!$("#fDirRec").value && c.direccion) $("#fDirRec").value=c.direccion; }
     clienteSel = c;
     $("#cliState").innerHTML = `<div class="found">Cliente existente · N.º ${esc(c.id)} · ${esc(c.nombre)}</div>`;
   } else {
@@ -634,32 +710,112 @@ function lookupCliente(){
 }
 $("#fCel").addEventListener("input", lookupCliente);
 $("#fCC").addEventListener("input", e=>{ e.target.value = onlyDigits(e.target.value); });
+$("#resetForm").onclick = resetForm;
 $("#form").addEventListener("submit", async e=>{
   e.preventDefault();
   if(!canWrite()) return;
   const err = m => { $("#formErr").textContent=m; $("#formErr").hidden=false; };
   $("#formErr").hidden = true;
+  const [origen, destino] = ($("#fRutaSel").value || "|").split("|");
+  if(!origen || !destino) return err("Elige la ruta del recorrido.");
   const cel = onlyDigits($("#fCel").value), nombre=$("#fNom").value.trim().slice(0,25), cc=onlyDigits($("#fCC").value);
   if(cel.length<7) return err("Escribe un celular válido.");
   if(!nombre) return err("Escribe el nombre del cliente.");
   if(!cc) return err("La C.C. debe tener solo números.");
-  const hr=$("#fHRec").value, he=$("#fHEnt").value;
-  if(he && hr && he < hr) return err("La hora de entrega no puede ser antes de la hora de recogida.");
-  syncSame();
-  const clean = items.map(i=>({descripcion:i.descripcion.trim().slice(0,100), peso: Math.round(+i.peso||0), tamano:i.tamano.trim().slice(0,25), valor: Math.round(+i.valor||0), origen:i.origen.trim(), destino:i.destino.trim()}));
-  if(clean.some(i=>!i.descripcion||!i.tamano||!i.origen||!i.destino)) return err("Completa todos los datos de cada producto.");
-  const btn=$("#saveBtn"); btn.disabled=true; btn.textContent="Guardando…";
+  const dirRecogida=$("#fDirRec").value.trim(), dirEntrega=$("#fDirEnt").value.trim();
+  if(!dirRecogida || !dirEntrega) return err("Escribe la dirección de recogida y la de entrega.");
+  const recCel = onlyDigits($("#fRecCel").value);
+  if(recCel && recCel.length<7) return err("El celular de quien recibe no es válido.");
+  const modo = modoGuardar;
+  const btns=[$("#savePre"),$("#saveBtn")]; btns.forEach(b=>b.disabled=true);
   try{
-    const sv = await api("/servicios", {method:"POST", body:{cliente:{celular:cel, nombre, cc}, fecha:$("#fFecha").value, horaRecogida:hr, horaEntrega:he, items:clean}});
-    state.servicios.push(sv);
+    const sv = await api("/preregistros", {method:"POST", body:{cliente:{celular:cel, nombre, cc}, fecha:$("#fFecha").value, origen, destino, dirRecogida, dirEntrega, recibeNombre:$("#fRecNom").value.trim(), recibeCelular:recCel}});
+    state.servicios.push(sv); lastSig = ""; renderAll();
     resetForm();
+    if(modo === "completar"){ openCompletar(sv); }
+    else { $("#dashDate").value = sv.fecha; renderDash(); go("tablero"); openPreAviso(sv); }
+    refresh().catch(()=>{});
+  }catch(ex){ err(ex?.message || "No se pudo guardar. Intenta de nuevo."); }
+  finally{ btns.forEach(b=>b.disabled=!canWrite()); }
+});
+function openPreAviso(s){
+  modal(`<div class="sheet-h"><h3>Pre-registro ${esc(s.guia)} guardado</h3><span class="spacer"></span><button class="btn sm ghost" data-close aria-label="Cerrar">✕</button></div>
+    <div class="sheet-b"><dl class="pre-sum">${preSumHTML(s)}</dl><p class="small muted" style="margin:0">Queda en la columna <b>Pre-registro</b> del tablero. Cuando tengas los productos y el valor, toca <b>Completar orden</b> para generar la guía.</p></div>
+    <div class="sheet-f"><a class="btn wa" href="${waLink(s.cliente.celular, preMsg(s))}" target="_blank" rel="noopener">Confirmar al cliente por WhatsApp</a><span class="spacer"></span><button class="btn" data-close>Listo</button></div>`);
+}
+function preSumHTML(s){
+  return `<div><dt>Pre-registro</dt><dd>${esc(s.guia)}</dd></div>
+    <div><dt>Ruta</dt><dd>${esc(ruta(s))}</dd></div>
+    <div><dt>Fecha</dt><dd>${fmtDate(s.fecha)}</dd></div>
+    <div><dt>Cliente</dt><dd>${esc(s.cliente.nombre)} · ${esc(s.cliente.celular)}</dd></div>
+    <div><dt>Recoge en</dt><dd>${esc(s.dirRecogida||"—")}</dd></div>
+    <div><dt>Entrega en</dt><dd>${esc(s.dirEntrega||"—")}</dd></div>
+    ${s.recibeNombre||s.recibeCelular?`<div><dt>Recibe</dt><dd>${esc([s.recibeNombre,s.recibeCelular].filter(Boolean).join(" · "))}</dd></div>`:""}`;
+}
+function preMsg(s){
+  return `*${EMPRESA.nombre}*\nHola ${s.cliente.nombre}, registramos tu solicitud de envío *${s.guia}*.\nRuta: ${ruta(s)}\nFecha: ${fmtDate(s.fecha)}\nRecogemos en: ${s.dirRecogida}\nEntregamos en: ${s.dirEntrega}\nTe enviaremos la guía con el valor cuando confirmemos los productos.\nInformación: ${EMPRESA.tel}`;
+}
+
+/* --- completar orden --- */
+function openCompletar(s){
+  completando = s;
+  items = [blankItem()];
+  $("#ordForm").reset(); $("#ordErr").hidden = true;
+  $("#preSum").innerHTML = preSumHTML(s);
+  $("#fRuta").textContent = `Ruta: ${ruta(s)}`;
+  renderItems();
+  $("#form").hidden = true; $("#ordForm").hidden = false;
+  go("nuevo");
+  setTimeout(()=>$("#it-desc-0")?.focus(), 50);
+}
+$("#ordVolver").onclick = ()=>{ showPre(); go("tablero"); };
+function renderItems(){
+  $("#items").innerHTML = items.map((it,i)=>`
+    <div class="item-f" data-i="${i}">
+      <div class="full row"><span class="item-n">Producto ${i+1}</span><span class="spacer"></span>${items.length>1?`<button type="button" class="btn sm ghost danger" data-rm="${i}">Quitar</button>`:""}</div>
+      <label class="f desc">Descripción<input id="it-desc-${i}" data-k="descripcion" maxlength="100" required value="${esc(it.descripcion)}" placeholder="Ej: caja de ropa, bulto de papa"></label>
+      <label class="f">Peso aprox. (kg)<input id="it-peso-${i}" data-k="peso" type="number" min="0" step="1" inputmode="numeric" required value="${esc(it.peso)}"></label>
+      <label class="f">Tamaño<input id="it-tam-${i}" data-k="tamano" maxlength="25" list="tamList" required value="${esc(it.tamano)}" placeholder="Pequeño, mediano…"></label>
+      <label class="f">Valor envío<input id="it-val-${i}" data-k="valor" type="number" min="0" step="100" inputmode="numeric" required value="${esc(it.valor)}" placeholder="$"></label>
+    </div>`).join("") + `<datalist id="tamList"><option value="Sobre"><option value="Pequeño"><option value="Mediano"><option value="Grande"><option value="Extra grande"><option value="Bulto"></datalist>`;
+  updTotal();
+}
+function updTotal(){ const t = items.reduce((a,i)=>a+(Number(i.valor)||0),0); $("#fTotal").textContent = money(t); return t; }
+$("#items").addEventListener("input", e=>{
+  const box = e.target.closest(".item-f"); if(!box) return;
+  const i = +box.dataset.i, k = e.target.dataset.k;
+  items[i][k] = e.target.value;
+  if(k==="valor") updTotal();
+});
+$("#items").addEventListener("click", e=>{ const r=e.target.closest("[data-rm]"); if(r){ items.splice(+r.dataset.rm,1); renderItems(); } });
+$("#addItem").onclick = ()=>{ items.push(blankItem()); renderItems(); $(`#it-desc-${items.length-1}`).focus(); };
+$("#verTerminos").onclick = ()=>{
+  modal(`<div class="sheet-h"><h3>Términos y condiciones</h3><span class="spacer"></span><button class="btn sm ghost" data-close aria-label="Cerrar">✕</button></div>
+    <div class="sheet-b">${terminosHTML("terms-txt")}</div>
+    <div class="sheet-f"><span class="spacer"></span><button class="btn primary" id="aceptoT">El cliente acepta</button></div>`);
+  $("#aceptoT").onclick = ()=>{ $("#fTerminos").checked = true; closeModal(); };
+};
+$("#ordForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  if(!canWrite() || !completando) return;
+  const err = m => { $("#ordErr").textContent=m; $("#ordErr").hidden=false; };
+  $("#ordErr").hidden = true;
+  const clean = items.map(i=>({descripcion:i.descripcion.trim().slice(0,100), peso: Math.round(+i.peso||0), tamano:i.tamano.trim().slice(0,25), valor: Math.round(+i.valor||0)}));
+  if(clean.some(i=>!i.descripcion||!i.tamano)) return err("Completa todos los datos de cada producto.");
+  if(!$("#fTerminos").checked) return err("El cliente debe aceptar los términos y condiciones.");
+  const btn=$("#ordBtn"); btn.disabled=true; btn.textContent="Generando…";
+  try{
+    const sv = await api(`/servicios/${encodeURIComponent(completando.id)}/completar`, {method:"POST", body:{items:clean, aceptaTerminos:true}});
+    const i = state.servicios.findIndex(x=>x.id===sv.id);
+    if(i>=0) state.servicios[i] = sv; else state.servicios.push(sv);
+    showPre();
     $("#dashDate").value = sv.fecha;
     lastSig = ""; renderAll();
     go("tablero");
     openGuia(sv, true);
     refresh().catch(()=>{});
-  }catch(ex){ err(ex?.message || "No se pudo guardar. Intenta de nuevo."); }
-  finally{ btn.disabled=!canWrite(); btn.textContent="Guardar y generar guía"; }
+  }catch(ex){ err(ex?.message || "No se pudo generar la guía. Intenta de nuevo."); }
+  finally{ btn.disabled=false; btn.textContent="Generar guía"; }
 });
 
 /* ---------------- Guía / WhatsApp ---------------- */
@@ -672,23 +828,29 @@ function guiaText(s){
     `Cliente: ${s.cliente.nombre}`,
     `C.C.: ${s.cliente.cc}`,
     `Fecha: ${fmtDate(s.fecha)}`,
-    `Recogida: ${fmtHora(s.horaRecogida)}`,
-    `Entrega estimada: ${fmtHora(s.horaEntrega)}`,
+    `Ruta: ${ruta(s)}`,
+    ...(s.dirRecogida?[`Recoge en: ${s.dirRecogida}`]:[]),
+    ...(s.dirEntrega?[`Entrega en: ${s.dirEntrega}`]:[]),
+    ...(s.recibeNombre||s.recibeCelular?[`Recibe: ${[s.recibeNombre,s.recibeCelular].filter(Boolean).join(" · ")}`]:[]),
     ``,
     `*Productos*`,
-    ...s.items.map((i,k)=>`${k+1}. ${i.descripcion} (${i.peso} kg, ${i.tamano})\n    ${i.origen} → ${i.destino}: ${money(i.valor)}`),
+    ...s.items.map((i,k)=>`${k+1}. ${i.descripcion} (${i.peso} kg, ${i.tamano}): ${money(i.valor)}`),
     ``,
     `*Valor del servicio: ${money(s.total)}*`,
     `Estado: ${EST[s.estado].t}`,
     ``,
     `${EMPRESA.dir}`,
     `Tel. ${EMPRESA.tel} · ${EMPRESA.email}`,
-    `¡Gracias por confiar en nosotros!`
+    `¡Gracias por confiar en nosotros!`,
+    ``,
+    terminosTexto(),
+    ``,
+    `✅ El cliente aceptó los términos y condiciones.`
   ];
   return L.join("\n");
 }
 function estadoMsg(s){
-  return `*${EMPRESA.nombre}*\nHola ${s.cliente?.nombre}, tu envío con guía *${s.guia}* está: *${EST[s.estado]?.t}*.\nEntrega estimada: ${fmtHora(s.horaEntrega)} del ${fmtDate(s.fecha)}.\nValor: ${money(s.total)}\nInformación: ${EMPRESA.tel}`;
+  return `*${EMPRESA.nombre}*\nHola ${s.cliente?.nombre}, tu envío con guía *${s.guia}* está: *${EST[s.estado]?.t}*.\nRuta: ${ruta(s)} · Fecha: ${fmtDate(s.fecha)}.\nValor: ${money(s.total)}\nInformación: ${EMPRESA.tel}`;
 }
 function receiptHTML(s){
   return `<div class="receipt">
@@ -699,20 +861,24 @@ function receiptHTML(s){
       <dt>C.C.</dt><dd>${esc(s.cliente.cc)}</dd>
       <dt>Celular</dt><dd>${esc(s.cliente.celular)}</dd>
       <dt>Fecha</dt><dd>${fmtDate(s.fecha)}</dd>
-      <dt>Recogida</dt><dd>${fmtHora(s.horaRecogida)}</dd>
-      <dt>Entrega est.</dt><dd>${fmtHora(s.horaEntrega)}</dd>
+      <dt>Ruta</dt><dd>${esc(ruta(s))}</dd>
+      ${s.dirRecogida?`<dt>Recoge en</dt><dd>${esc(s.dirRecogida)}</dd>`:""}
+      ${s.dirEntrega?`<dt>Entrega en</dt><dd>${esc(s.dirEntrega)}</dd>`:""}
+      ${s.recibeNombre||s.recibeCelular?`<dt>Recibe</dt><dd>${esc([s.recibeNombre,s.recibeCelular].filter(Boolean).join(" · "))}</dd>`:""}
       <dt>Estado</dt><dd>${EST[s.estado].t}</dd>
     </dl>
-    <div class="tbl-wrap"><table class="num"><thead><tr><th>#</th><th>Producto</th><th>Ruta</th><th class="r">Valor</th></tr></thead><tbody>
-      ${s.items.map((i,k)=>`<tr><td>${k+1}</td><td>${esc(i.descripcion)}<br><span style="color:#5a6d88">${i.peso} kg · ${esc(i.tamano)}</span></td><td>${esc(i.origen)} → ${esc(i.destino)}</td><td class="r">${money(i.valor)}</td></tr>`).join("")}
+    <div class="tbl-wrap"><table class="num"><thead><tr><th>#</th><th>Producto</th><th>Peso · Tamaño</th><th class="r">Valor</th></tr></thead><tbody>
+      ${s.items.map((i,k)=>`<tr><td>${k+1}</td><td>${esc(i.descripcion)}</td><td>${i.peso} kg · ${esc(i.tamano)}</td><td class="r">${money(i.valor)}</td></tr>`).join("")}
     </tbody></table></div>
     <div class="rt"><span>Valor del servicio</span><b class="num">${money(s.total)}</b></div>
+    ${terminosHTML("cond")}
+    <div class="acepta">✔ El cliente aceptó los términos y condiciones.</div>
     <div class="foot">Conserve esta guía para consultar su envío · Emitida ${new Date(s.creadoEn||Date.now()).toLocaleString("es-CO")}</div>
   </div>`;
 }
 function openGuia(s, nueva){
   const txt = guiaText(s);
-  const corto = `*${EMPRESA.nombre}*\nHola ${s.cliente.nombre}, te enviamos la guía de tu envío *${s.guia}*.\nValor: ${money(s.total)} · Entrega estimada: ${fmtHora(s.horaEntrega)} del ${fmtDate(s.fecha)}.\nInformación: ${EMPRESA.tel}`;
+  const corto = `*${EMPRESA.nombre}*\nHola ${s.cliente.nombre}, te enviamos la guía de tu envío *${s.guia}*.\nRuta: ${ruta(s)} · Fecha: ${fmtDate(s.fecha)}\nValor: ${money(s.total)}\nInformación: ${EMPRESA.tel}\n\n${terminosTexto()}`;
   modal(`<div class="sheet-h"><h3>${nueva?"Guía creada":"Guía"} ${esc(s.guia)}</h3><span class="spacer"></span><button class="btn sm ghost" data-close aria-label="Cerrar">✕</button></div>
     <div class="sheet-b">${receiptHTML(s)}
       <div id="imgSteps" class="imgsteps" hidden></div>
@@ -811,7 +977,7 @@ function renderClientes(){
   </tbody></table>` : `<div class="empty"><h3>${q?"Sin resultados":"Aún no hay clientes"}</h3><p>Los clientes se crean automáticamente al registrar un servicio, con número consecutivo (C0001, C0002…).</p></div>`;
 }
 $("#cliSearch").addEventListener("input", renderClientes);
-$("#cliTable").addEventListener("click", e=>{ const b=e.target.closest("[data-cel]"); if(!b) return; resetForm(); $("#fCel").value=b.dataset.cel; lookupCliente(); go("nuevo"); $("#fHRec").focus(); });
+$("#cliTable").addEventListener("click", e=>{ const b=e.target.closest("[data-cel]"); if(!b) return; resetForm(); $("#fCel").value=b.dataset.cel; lookupCliente(); go("nuevo"); $("#fRutaSel").focus(); });
 
 /* ---------------- Reporte diario ---------------- */
 async function loadReporte(){
@@ -828,9 +994,9 @@ function fillRepInputs(){
 }
 function repAuto(d){
   const S = state.servicios;
-  const recibidos = S.filter(s=>s.fecha===d && s.estado!=="cancelado");
+  const recibidos = S.filter(s=>s.fecha===d && !["cancelado","pre_registro"].includes(s.estado));
   const entregados = S.filter(s=>s.estado==="entregado" && dayOf(s.entregadoEn)===d);
-  const pendientes = S.filter(s=>s.fecha<=d && !["entregado","cancelado"].includes(s.estado));
+  const pendientes = S.filter(s=>s.fecha<=d && !["entregado","cancelado","pre_registro"].includes(s.estado));
   const ingresos = entregados.reduce((a,s)=>a+(+s.total||0),0);
   return {recibidos:recibidos.length, entregados:entregados.length, pendientes:pendientes.length, ingresos, cancelados:S.filter(s=>s.fecha===d&&s.estado==="cancelado").length};
 }
@@ -883,7 +1049,7 @@ $("#repGen").onclick = async ()=>{
   const rows = [["Concepto","Valor"],["Recibidos hoy",a.recibidos],["Entregados",a.entregados],["Pendientes de entrega",a.pendientes],["Gastos del día",r.gastos],["Ingresos diarios",a.ingresos],["Sueldos",r.sueldos],["Crédito carro",r.credito],["Balance",r.neto],["Notas",r.notas||""]];
   const entregados = state.servicios.filter(s=>s.estado==="entregado" && dayOf(s.entregadoEn)===r.fecha);
   const csv = "﻿" + rows.map(x=>x.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n")
-    + "\n\nGuía;Cliente;Celular;Hora entrega;Valor\n" + entregados.map(s=>[s.guia,s.cliente.nombre,s.cliente.celular,s.horaEntrega,s.total].map(v=>`"${v}"`).join(";")).join("\n");
+    + "\n\nGuía;Cliente;Celular;Ruta;Valor\n" + entregados.map(s=>[s.guia,s.cliente.nombre,s.cliente.celular,ruta(s),s.total].map(v=>`"${v}"`).join(";")).join("\n");
   modal(`<div class="sheet-h"><h3>Reporte ${fmtDate(r.fecha)}</h3><span class="spacer"></span><button class="btn sm ghost" data-close aria-label="Cerrar">✕</button></div>
     <div class="sheet-b"><div class="receipt">
       <div class="rh"><img src="${LOGO}" alt=""><div class="co"><b>${EMPRESA.nombre}</b><br>Reporte diario · ${fmtDate(r.fecha)}</div></div>
